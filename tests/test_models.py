@@ -27,7 +27,7 @@ import os
 import logging
 import unittest
 from decimal import Decimal
-from service.models import Product, Category, db
+from service.models import Product, Category, db, DataValidationError
 from service import app
 from tests.factories import ProductFactory
 
@@ -72,17 +72,12 @@ class TestProductModel(unittest.TestCase):
     #  T E S T   C A S E S
     ######################################################################
 
-    def test_create_a_product(self):
-        """It should Create a product and assert that it exists"""
-        product = Product(name="Fedora", description="A red hat", price=12.50, available=True, category=Category.CLOTHS)
-        self.assertEqual(str(product), "<Product Fedora id=[None]>")
-        self.assertTrue(product is not None)
-        self.assertEqual(product.id, None)
-        self.assertEqual(product.name, "Fedora")
-        self.assertEqual(product.description, "A red hat")
-        self.assertEqual(product.available, True)
-        self.assertEqual(product.price, 12.50)
-        self.assertEqual(product.category, Category.CLOTHS)
+    def test_create_product(self):
+        """It should Create a Product and assert that it exists"""
+        product = Product(name="Sample", description="A sample product", price=Decimal('19.99'), available=True, category=Category.CLOTHS)
+        self.assertIsNone(product.id)
+        product.create()
+        self.assertIsNotNone(product.id)
 
     def test_add_a_product(self):
         """It should Create a product and add it to the database"""
@@ -162,6 +157,7 @@ class TestProductModel(unittest.TestCase):
         self.assertTrue(products == [])
 
     def test_list_all_products(self):
+        """It should list all products from the database"""
         products = Product.all()
         logger.info(products)
         self.assertTrue(products == [])
@@ -178,6 +174,7 @@ class TestProductModel(unittest.TestCase):
         self.assertTrue(len(products) == 5)
 
     def test_search_by_name(self):
+        """It should Search a product by its name"""
         products = ProductFactory.create_batch(5)
         for product in products:
             product.create()
@@ -200,6 +197,7 @@ class TestProductModel(unittest.TestCase):
             self.assertEqual(product.category, category)
 
     def test_search_by_availability(self):
+        """It should Search a product by its availability"""
         products = ProductFactory.create_batch(10)
         for product in products:
             product.create()
@@ -210,3 +208,31 @@ class TestProductModel(unittest.TestCase):
         self.assertEqual(found.count(), count)
         for product in found:
             self.assertEqual(product.available, available)
+    def test_search_by_price(self):
+        """It should Search a product by its price"""
+        products = ProductFactory.create_batch(10)
+        for product in products:
+            product.create()
+        price = products[9].price
+        logger.info(f'Price of last product: {price}')
+        count = len([product for product in products if product.price == price])
+        found = Product.find_by_price(price)
+        self.assertEqual(found.count(), count)
+        for product in found:
+            self.assertEqual(product.price, price)
+
+    def test_deserialize(self):
+        """It should convert a dictionary into a product"""
+        product = ProductFactory.create_batch(1)[0]
+        product.create()
+        dic = product.serialize()
+        # Test bad data in dictionary
+        dic['category']=0.1
+        with self.assertRaises(DataValidationError):
+            product.deserialize(dic)
+
+    def test_update_with_no_id(self):
+        """It should not Update a Product with no ID"""
+        product = Product(name="Sample", description="A sample product", price=Decimal('19.99'), available=True, category=Category.CLOTHS)
+        with self.assertRaises(DataValidationError):
+            product.update()
